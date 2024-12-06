@@ -1,0 +1,8 @@
+ptwt
+PyWavelets
+torch
+torchvision
+torchaudio
+einops
+hydra-core
+treescope
