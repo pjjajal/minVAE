@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 from layers.distributions import GaussianDistribution
 from layers.layers2d import Encoder, Decoder
-from layers.wavelet import WaveletTransform
+from layers.wavelet import WaveletTransform, IdentityTransform
 
 
 class VAE(nn.Module):
@@ -25,6 +25,7 @@ class VAE(nn.Module):
     ):
         super().__init__()
         self.z_channels = z_channels
+        self.spatial_compression = spatial_compression
 
         # Wavelet Transform
         self.wavelet_transform = (
@@ -34,7 +35,7 @@ class VAE(nn.Module):
                 maxlevel=maxlevel,
             )
             if wavelet
-            else nn.Identity()
+            else IdentityTransform()
         )
         # Update in_channels, out_channels, and resolution when using Wavelet Transform
         self.in_channels = (
@@ -47,14 +48,14 @@ class VAE(nn.Module):
 
         # Encoder and Decoder
         self.encoder = Encoder(
-            in_channels=in_channels,
+            in_channels=self.in_channels,
             channels=channels,
             channels_mult=channels_mult,
             num_res_blocks=num_res_blocks,
             attn_resolutions=attn_resolutions,
             dropout=dropout,
-            resolution=resolution,
-            z_channels=z_channels,
+            resolution=self.resolution,
+            z_channels=int(2 * z_channels), # double channels for mean and variance
             spatial_compression=spatial_compression,
         )
         self.decoder = Decoder(
@@ -64,8 +65,8 @@ class VAE(nn.Module):
             num_res_blocks=num_res_blocks,
             attn_resolutions=attn_resolutions,
             dropout=dropout,
-            resolution=resolution,
-            out_channels=out_channels,
+            resolution=self.resolution,
+            out_channels=self.out_channels,
             spatial_compression=spatial_compression,
         )
         self.distribution = GaussianDistribution()
@@ -73,13 +74,14 @@ class VAE(nn.Module):
     def encode(self, x: torch.Tensor):
         h = self.encoder(x)
         return self.distribution(h)
-    
+
     def decode(self, z: torch.Tensor):
         dec = self.decoder(z)
         return dec
-    
+
     def forward(self, x: torch.Tensor):
         x = self.wavelet_transform(x)
         z, posteriors = self.encode(x)
         reconstruction = self.decode(z)
+        reconstruction = self.wavelet_transform.reconstruct(reconstruction)
         return reconstruction, posteriors

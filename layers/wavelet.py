@@ -10,7 +10,63 @@ from ptwt.conv_transform_2 import wavedec2, waverec2
 from pywt import Wavelet
 
 
+class IdentityTransform(nn.Module):
+    """Identity transform layer that returns input unchanged.
+    A simple PyTorch module that implements an identity transformation, meaning it returns
+    the input tensor without any modifications. This can be useful as a placeholder or
+    for testing purposes.
+    Methods:
+        deconstruct(x): Returns input tensor unchanged.
+        reconstruct(x): Returns input tensor unchanged.
+        forward(x): Returns input tensor unchanged.
+    Args for methods:
+        x (torch.Tensor): Input tensor of any shape.
+    Returns:
+        torch.Tensor: The same tensor as the input.
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def deconstruct(self, x):
+        return x
+
+    def reconstruct(self, x):
+        return x
+
+    def forward(self, x):
+        return x
+
+
 class WaveletTransform(nn.Module):
+    """A PyTorch module implementing 2D Discrete Wavelet Transform (DWT) and its inverse.
+
+    This module performs multi-level 2D wavelet (packet) decomposition and reconstruction using various
+    wavelet families. It uses separable convolution operations to implement the transform.
+
+    Args:
+        in_channels (int, optional): Number of input channels. Defaults to 3.
+        wavelet (str, optional): Name of the wavelet to use (e.g., 'haar', 'db1'). Defaults to "haar".
+        maxlevel (int, optional): Maximum level of decomposition. Defaults to 1.
+        mode (Literal["zero", "reflect", "replicate", "circular"], optional): Padding mode for 
+            boundaries. Defaults to "replicate".
+
+    Attributes:
+        leaf_nodes (int): Total number of leaf nodes in the wavelet tree (4^maxlevel).
+        out_channels (int): Number of output channels (leaf_nodes * in_channels).
+        dec_lo (Tensor): Low-pass decomposition filter.
+        dec_hi (Tensor): High-pass decomposition filter.
+        rec_lo (Tensor): Low-pass reconstruction filter.
+        rec_hi (Tensor): High-pass reconstruction filter.
+
+    Methods:
+        forward(x): Performs forward wavelet transform.
+        deconstruct(x): Decomposes input into wavelet coefficients.
+        reconstruct(x): Reconstructs signal from wavelet coefficients.
+
+    Note:
+        The transform is non-trainable as all parameters have requires_grad=False.
+    """
     def __init__(
         self,
         in_channels=3,
