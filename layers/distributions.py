@@ -9,8 +9,10 @@ class GaussianDistribution(torch.nn.Module):
     def sample(self, mean, logvar):
         std = torch.exp(0.5 * logvar)
         return mean + torch.rand_like(mean) * std
-    
-    def forward(self, parameters):
+
+    def forward(
+        self, parameters
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         mean, logvar = torch.chunk(parameters, 2, dim=1)
         logvar = torch.clamp(logvar, self.min_logvar, self.max_logvar)
-        return mean, logvar
+        return self.sample(mean, logvar), (mean, logvar)
