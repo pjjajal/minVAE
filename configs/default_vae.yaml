@@ -1,0 +1,109 @@
+defaults:
+  - override hydra/job_logging: none
+
+seed: 0
+
+trainer:
+  devices: 1
+  num_nodes: 1
+  # For available strategies look at the PyTorch Lightning docs.
+  strategy: ddp_find_unused_parameters_true
+  # Look at the PyTorch Lightning docs for available precision.
+  precision: bf16-mixed
+
+  # logging settings
+  wandb: false
+  wandb_project: null
+  log_every_n_steps: 10
+  gradnorm_logging: false
+  rich_print: false
+
+  # checkpointing settings
+  checkpoint_save_dir: null
+  checkpoint_name: null
+  save_loc: null # no need to specify this.
+
+model:
+  compile: true
+  config:
+    # num channels in input and output
+    in_channels: 3
+    out_channels: 3
+    # base number of channels in the encoder and decoder.
+    channels: 128
+    # how the channels change in the encoder and decoder.
+    channels_mult: [1, 2, 4, 4]
+    # number of residual blocks in the upsampling (dec.) and downsampling (enc.) path.
+    num_res_blocks: 2
+    # resolution at which to apply self-attention in the encoder downsampling.
+    attn_resolutions: [32]
+    dropout: 0.0
+    # input resolution
+    resolution: 256
+    # latent size, for VAE the encoder predicts 2 * latent_size.
+    # representing the mean and logvar of the latent distribution.
+    z_channels: 4
+    # spatial compression controls how much to
+    spatial_compression: 8
+    # wavelet settings
+    wavelet: null # supports the wavelets from PyWavelets
+    maxlevel: 1 # number of levels to apply wavelet transform
+
+dataset:
+  name: celeba
+  num_classes: 0
+  data_path: null
+  image_size: 256
+  max_crop_size: 512
+  augmentations:
+    horizontal_flip: true
+
+  # dataloader settings
+  batch_size: 32
+  num_workers: 4
+  val_batch_size: 32
+  val_num_workers: 4
+  pin_memory: true
+
+  # distributed sampler
+  use_distributed_sampler: false
+
+loss:
+  # reconstruction loss
+  recon_loss: l1
+  # kl loss weight
+  kl_weight: 1.0
+
+  perceptual_loss:
+    enable: false
+    type: lpips
+    weight: 1.0
+
+
+  adversarial_loss:
+    enable: false
+    weight: 1.0
+    discriminator: small
+    loss_type: bce # bce or hinge
+
+optimizer:
+  # general settings
+  total_steps: 100000
+  optimizer: adamw
+  lr: null
+  weight_decay: null
+  betas: [0.9, 0.999]
+  grad_clip: null
+  ema: null
+  accumulate_grad_batches: 1
+  overfit_batches: 0.0 # for debugging purposes, [0.0, 1.0]
+  # shampoo specific settings
+  preconditioning_frequency: null
+  max_preconditioner_dim: null
+  start_preconditioning_step: null
+  # scheduler settings
+  schedule: null
+  warmup_steps: 0
+  warmup_lr: null
+  min_lr: null
+  power: null

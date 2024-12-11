@@ -28,6 +28,7 @@ class VAE(nn.Module):
         self.spatial_compression = spatial_compression
 
         # Wavelet Transform
+        print(f"Wavelet Transform: {wavelet}")
         self.wavelet_transform = (
             WaveletTransform(
                 in_channels=in_channels,

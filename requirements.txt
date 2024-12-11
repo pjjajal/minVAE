@@ -6,3 +6,7 @@ torchaudio
 einops
 hydra-core
 treescope
+datasets
+lightning
+torchmetrics[image]
+dreamsim
