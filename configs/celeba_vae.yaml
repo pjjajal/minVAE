@@ -39,28 +39,33 @@ model:
     attn_resolutions: [32]
     dropout: 0.0
     # input resolution
-    resolution: 64
+    resolution: 256
     # latent size, for VAE the encoder predicts 2 * latent_size.
     # representing the mean and logvar of the latent distribution.
     z_channels: 16
     # spatial compression controls how much to
-    spatial_compression: 4
+    spatial_compression: 8
     # wavelet settings
-    wavelet: haar # supports the wavelets from PyWavelets
+    wavelet: db4 # supports the wavelets from PyWavelets
     maxlevel: 2 # number of levels to apply wavelet transform
-    
+    # type
+    vae_type:
+      type: continuous
+      latent: identity
+      # discrete
+      quantization: 
 
 dataset:
-  name: celeba
+  name: celeba_hq
   num_classes: 0
   data_path: null
-  image_size: 64
-  max_crop_size: 64
+  image_size: 256
+  max_crop_size: 256
   augmentations:
     horizontal_flip: true
 
   # dataloader settings
-  batch_size: 128
+  batch_size: 32
   num_workers: 8
   val_batch_size: 32
   val_num_workers: 4
@@ -71,12 +76,12 @@ dataset:
 
 loss:
   # reconstruction loss
-  recon_loss: l2
+  recon_loss: l1-smooth
   # kl loss weight
   kl_weight: 1.0
 
   perceptual_loss:
-    enable: false
+    enable: true
     type: lpips
     model_name: vgg
     weight: 1.0

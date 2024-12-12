@@ -9,7 +9,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision.utils import make_grid
 from datasets.distributed import split_dataset_by_node
 from dreamsim import dreamsim
 from lightning.pytorch.callbacks import (
@@ -27,10 +26,12 @@ from torchmetrics.image import (
     PeakSignalNoiseRatio,
     StructuralSimilarityIndexMeasure,
 )
+from torchvision.utils import make_grid
 
 import utils.loss as losses
 import utils.schedulers as schedulers
 from dataset.celeba import celeba_collate_fn, celeba_train, celeba_val
+from dataset.celeba_hq import celeba_hq_collate_fn, celeba_hq_train, celeba_hq_val
 from dataset.transforms import base_train_transform, val_transform
 from dataset.utils import image_collate_fn
 from models.gan import DinoPatchDiscriminator
@@ -145,9 +146,17 @@ class VAEModel(L.LightningModule):
             discriminator_opt.step()
 
         # optimize vae
-        if self.cfg.optimizer.discriminator.discriminator_warmup < self.global_step or not self.use_adversarial_loss:
+        if (
+            self.cfg.optimizer.discriminator.discriminator_warmup < self.global_step
+            or not self.use_adversarial_loss
+        ):
             reconstruction_loss = self.reconstruction_loss(reconstruction, x)
-            kl_loss = self.kl_weight * self.kl_loss(mu, logvar)
+            
+            
+            kl_loss = 0.0
+            if self.cfg.model.config.vae_type.latent != "identity":
+                kl_loss = self.kl_weight * self.kl_loss(mu, logvar)
+
             vae_loss = reconstruction_loss + kl_loss
 
             g_loss = 0.0
@@ -317,18 +326,19 @@ def main(cfg: DictConfig) -> None:
 
     # create model
     model_cfg = OmegaConf.to_container(cfg.model.config, resolve=True)
+    model_cfg.pop('vae_type')
     vae = VAE(**model_cfg)
 
     if cfg.model.compile:
         vae.compile()
 
     # create dataset
-    train_dataset = celeba_train(
+    train_dataset = celeba_hq_train(
         transform=base_train_transform(
             cfg.dataset.image_size, cfg.dataset.augmentations.horizontal_flip
         ),
     )
-    val_dataset = celeba_val(
+    val_dataset = celeba_hq_val(
         transform=val_transform(
             cfg.dataset.image_size,
             cfg.dataset.max_crop_size,
@@ -347,14 +357,14 @@ def main(cfg: DictConfig) -> None:
         batch_size=cfg.dataset.batch_size,
         shuffle=True,
         num_workers=cfg.dataset.num_workers,
-        collate_fn=celeba_collate_fn,
+        collate_fn=celeba_hq_collate_fn,
     )
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
         batch_size=cfg.dataset.batch_size,
         shuffle=False,
         num_workers=cfg.dataset.num_workers,
-        collate_fn=celeba_collate_fn,
+        collate_fn=celeba_hq_collate_fn,
     )
 
     model = VAEModel(cfg, vae)

@@ -16,3 +16,7 @@ class GaussianDistribution(torch.nn.Module):
         mean, logvar = torch.chunk(parameters, 2, dim=1)
         logvar = torch.clamp(logvar, self.min_logvar, self.max_logvar)
         return self.sample(mean, logvar), (mean, logvar)
+
+class IdentityDistribution(torch.nn.Module):
+    def forward(self, parameters):
+        return parameters, (None, None)

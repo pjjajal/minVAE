@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from layers.distributions import GaussianDistribution
+from layers.distributions import GaussianDistribution, IdentityDistribution
 from layers.layers2d import Encoder, Decoder
 from layers.wavelet import WaveletTransform, IdentityTransform
 
@@ -22,6 +22,7 @@ class VAE(nn.Module):
         spatial_compression: int,
         wavelet: str = None,
         maxlevel: int = 1,
+        prior="gaussian",
     ):
         super().__init__()
         self.z_channels = z_channels
@@ -70,7 +71,10 @@ class VAE(nn.Module):
             out_channels=self.out_channels,
             spatial_compression=spatial_compression,
         )
-        self.distribution = GaussianDistribution()
+        if prior == "gaussian":
+            self.distribution = GaussianDistribution()
+        elif prior == "identity":
+            self.distribution = IdentityDistribution()
 
     def encode(self, x: torch.Tensor):
         h = self.encoder(x)
