@@ -72,6 +72,8 @@ class VAE(nn.Module):
             out_channels=self.out_channels,
             spatial_compression=spatial_compression,
         )
+        self.quant_conv = nn.Conv2d(int(z_factor * z_channels), int(z_factor * z_channels), 1)
+        self.post_quant_conv = nn.Conv2d(z_channels, z_channels, 1)
         if prior == "gaussian":
             self.distribution = GaussianDistribution()
         elif prior == "identity":
@@ -79,9 +81,11 @@ class VAE(nn.Module):
 
     def encode(self, x: torch.Tensor):
         h = self.encoder(x)
+        h = self.quant_conv(h)
         return self.distribution(h)
 
     def decode(self, z: torch.Tensor):
+        z = self.post_quant_conv(z)
         dec = self.decoder(z)
         return dec
 

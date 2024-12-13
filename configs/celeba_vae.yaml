@@ -12,7 +12,7 @@ trainer:
   precision: bf16-mixed
 
   # logging settings
-  wandb: false
+  wandb: true
   wandb_project: minVAE
   log_every_n_steps: 10
   gradnorm_logging: false
@@ -51,7 +51,7 @@ model:
     # type
   vae_type:
     type: continuous
-    latent: identity
+    latent: gaussian
     # discrete
     quantization: fsq
     levels: [7, 5, 5, 5]
@@ -59,11 +59,11 @@ model:
 
 dataset:
   num_proc: 1
-  name: celeba_hq
+  name: celeba
   num_classes: 0
   data_path: null
-  image_size: 256
-  max_crop_size: 256
+  image_size: 64
+  max_crop_size: 64
   augmentations:
     horizontal_flip: true
 
@@ -81,10 +81,10 @@ loss:
   # reconstruction loss
   recon_loss: l1-smooth
   # kl loss weight
-  kl_weight: 1.0
+  kl_weight: 1.0e-6
 
   perceptual_loss:
-    enable: true
+    enable: false
     type: lpips
     model_name: vgg
     weight: 1.0

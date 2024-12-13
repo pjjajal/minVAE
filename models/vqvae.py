@@ -22,6 +22,7 @@ class VQVAE(nn.Module):
         spatial_compression: int,
         quantization: str,
         levels: list[int],
+        embedding_dim: int,
         num_codebooks: int = 1,
         wavelet: str = None,
         maxlevel: int = 1,
@@ -73,18 +74,22 @@ class VQVAE(nn.Module):
             out_channels=self.out_channels,
             spatial_compression=spatial_compression,
         )
-
+        effective_embedding_dim = num_codebooks * embedding_dim
+        self.quant_conv = nn.Conv2d(z_channels, effective_embedding_dim, 1)
+        self.post_quant_conv = nn.Conv2d(effective_embedding_dim, z_channels, 1)
         if quantization == "fsq":
             self.quantizer = FSQuantizer(
-                levels=levels, input_dim=z_channels, num_codebooks=num_codebooks
+                levels=levels, input_dim=effective_embedding_dim, num_codebooks=num_codebooks
             )
 
     def encode(self, x: torch.Tensor):
         x = self.encoder(x)
+        x = self.quant_conv(x)
         codes, indices = self.quantizer(x)
         return codes, indices
 
     def decode(self, z: torch.Tensor):
+        z = self.post_quant_conv(z)
         return self.decoder(z)
 
     def forward(self, x: torch.Tensor):

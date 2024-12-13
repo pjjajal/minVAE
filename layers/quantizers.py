@@ -47,11 +47,27 @@ class FSQuantizer(nn.Module):
         self.num_codebooks = num_codebooks
         self.effective_codebook_dim = effective_codebook_dim
 
+        self.keep_num_codebooks_dim = num_codebooks > 1
+
         self.dim = input_dim
-        self.proj_in = nn.Linear(input_dim, effective_codebook_dim)
-        self.proj_out = nn.Linear(effective_codebook_dim, input_dim)
+        has_projections = self.dim != effective_codebook_dim
+        self.proj_in = (
+            nn.Linear(input_dim, effective_codebook_dim)
+            if has_projections
+            else nn.Identity()
+        )
+        self.proj_out = (
+            nn.Linear(effective_codebook_dim, input_dim)
+            if has_projections
+            else nn.Identity()
+        )
 
         self.codebook_size = self._levels.prod().item()
+
+        implicit_codebook = self.indices_to_codes(
+            torch.arange(self.codebook_size), proj_out=False
+        )
+        self.register_buffer("implicit_codebook", implicit_codebook, persistent=False)
 
     def bound(self, z: torch.Tensor, eps: float = 1e-3) -> torch.Tensor:
         """Bound `z`, an array of shape (..., d)."""
@@ -80,16 +96,21 @@ class FSQuantizer(nn.Module):
         zhat = self._scale_and_shift(zhat).float()
         return (zhat * self._basis).sum(dim=-1).to(torch.int32)
 
-    def indices_to_codes(self, indices: torch.Tensor) -> torch.Tensor:
+    def indices_to_codes(self, indices: torch.Tensor, proj_out=False) -> torch.Tensor:
         """Inverse of `codes_to_indices`."""
+        is_img_or_video = indices.ndim >= (3 + int(self.keep_num_codebooks_dim))
         indices = rearrange(indices, "... -> ... 1")
         codes_non_centered = (indices // self._basis) % self._levels
         codes = self._scale_and_shift_inverse(codes_non_centered)
 
-        codes = rearrange(codes, "... c d -> ... (c d)")
-        codes = self.proj_out(codes)
+        if self.keep_num_codebooks_dim:
+            codes = rearrange(codes, "... c d -> ... (c d)")
 
-        codes = rearrange(codes, "b ... d -> b d ...")
+        if proj_out:
+            codes = self.proj_out(codes)
+
+        if is_img_or_video:
+            codes = rearrange(codes, "b ... d -> b d ...")
 
         return codes.to(self.dtype)
 
@@ -98,7 +119,9 @@ class FSQuantizer(nn.Module):
         z = rearrange(z, "b d ... -> b ... d")
         z, ps = pack_one(z, "b * d")
 
-        assert z.shape[-1] == self.dim, f"expected input dim {self.dim}, got {z.shape[-1]}"
+        assert (
+            z.shape[-1] == self.dim
+        ), f"expected input dim {self.dim}, got {z.shape[-1]}"
 
         z = self.proj_in(z)
 
