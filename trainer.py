@@ -30,12 +30,11 @@ from torchvision.utils import make_grid
 
 import utils.loss as losses
 import utils.schedulers as schedulers
-from dataset.celeba import celeba_collate_fn, celeba_train, celeba_val
-from dataset.celeba_hq import celeba_hq_collate_fn, celeba_hq_train, celeba_hq_val
+from dataset import create_dataset
 from dataset.transforms import base_train_transform, val_transform
-from dataset.utils import image_collate_fn
 from models.gan import DinoPatchDiscriminator
 from models.vae import VAE
+from models.vqvae import VQVAE
 
 DEFAULT_CHECKPOINTS_PATH = Path("./checkpoints")
 
@@ -75,6 +74,8 @@ class VAEModel(L.LightningModule):
         super().__init__()
         self.cfg = cfg
         self.model = model
+        self.vae_cfg = cfg.model.vae_type
+        self.is_discrete = self.vae_cfg.type == "discrete"
 
         # manual optimization.
         self.automatic_optimization = False
@@ -132,8 +133,12 @@ class VAEModel(L.LightningModule):
 
         x, label = batch
 
-        # vae forward pass
-        reconstruction, (mu, logvar) = self.model.forward(x)
+        # forward pass
+        reconstruction, posteriors = self.model.forward(x)
+        if self.is_discrete:
+            (indices,) = posteriors
+        else:
+            mu, logvar = posteriors
 
         # optimize discriminator
         d_loss = 0.0
@@ -146,41 +151,30 @@ class VAEModel(L.LightningModule):
             discriminator_opt.step()
 
         # optimize vae
-        if (
-            self.cfg.optimizer.discriminator.discriminator_warmup < self.global_step
-            or not self.use_adversarial_loss
-        ):
-            reconstruction_loss = self.reconstruction_loss(reconstruction, x)
-            
-            
-            kl_loss = 0.0
-            if self.cfg.model.config.vae_type.latent != "identity":
-                kl_loss = self.kl_weight * self.kl_loss(mu, logvar)
+        reconstruction_loss = self.reconstruction_loss(reconstruction, x)
 
-            vae_loss = reconstruction_loss + kl_loss
+        kl_loss = 0.0
+        if not self.is_discrete and self.vae_cfg.latent != "identity":
+            kl_loss = self.kl_weight * self.kl_loss(mu, logvar)
 
-            g_loss = 0.0
-            if self.use_adversarial_loss:
-                d_pred = self.discriminator(reconstruction)
-                g_loss = self.adversarial_weight * self.generator_loss(d_pred)
-                vae_loss += g_loss
-            perceptual_loss = 0.0
-            if self.use_perceptual_loss:
-                perceptual_loss = self.perceptual_weight * self.perceptual_loss(
-                    reconstruction.clamp(-1, 1), x
-                )
-                vae_loss += perceptual_loss
+        vae_loss = reconstruction_loss + kl_loss
 
-            vae_opt.zero_grad()
-            self.manual_backward(vae_loss)
-            vae_opt.step()
-            vae_schedule.step()
-        else:
-            reconstruction_loss = 0.0
-            kl_loss = 0.0
-            vae_loss = 0.0
-            perceptual_loss = 0.0
-            g_loss = 0.0
+        g_loss = 0.0
+        if self.use_adversarial_loss:
+            d_pred = self.discriminator(reconstruction)
+            g_loss = self.adversarial_weight * self.generator_loss(d_pred)
+            vae_loss += g_loss
+        perceptual_loss = 0.0
+        if self.use_perceptual_loss:
+            perceptual_loss = self.perceptual_weight * self.perceptual_loss(
+                reconstruction.clamp(-1, 1), x
+            )
+            vae_loss += perceptual_loss
+
+        vae_opt.zero_grad()
+        self.manual_backward(vae_loss)
+        vae_opt.step()
+        vae_schedule.step()
 
         # log losses
         self.log_dict(
@@ -199,7 +193,11 @@ class VAEModel(L.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, label = batch
-        reconstruction, (mu, logvar) = self.model.forward(x)
+        reconstruction, posteriors = self.model.forward(x)
+        if self.is_discrete:
+            (indices,) = posteriors
+        else:
+            mu, logvar = posteriors
 
         psnr = self.psnr(reconstruction, x)
         ssim = self.ssim(reconstruction, x)
@@ -326,23 +324,30 @@ def main(cfg: DictConfig) -> None:
 
     # create model
     model_cfg = OmegaConf.to_container(cfg.model.config, resolve=True)
-    model_cfg.pop('vae_type')
-    vae = VAE(**model_cfg)
+    vae_cfg = OmegaConf.to_container(cfg.model.vae_type, resolve=True)
+    if vae_cfg.type == "continuous":
+        vae = VAE(prior=vae_cfg.latent, **model_cfg)
+    elif vae_cfg.type == "discrete":
+        vae = VQVAE(
+            quantization=vae_cfg.quantization,
+            levels=vae_cfg.levels,
+            num_codebooks=vae_cfg.num_codebooks,
+            **model_cfg,
+        )
 
     if cfg.model.compile:
         vae.compile()
 
-    # create dataset
-    train_dataset = celeba_hq_train(
-        transform=base_train_transform(
-            cfg.dataset.image_size, cfg.dataset.augmentations.horizontal_flip
-        ),
+    # # create dataset
+    train_transform = base_train_transform(
+        cfg.dataset.image_size, cfg.dataset.augmentations.horizontal_flip
     )
-    val_dataset = celeba_hq_val(
-        transform=val_transform(
-            cfg.dataset.image_size,
-            cfg.dataset.max_crop_size,
-        ),
+    val_transform = val_transform(cfg.dataset.image_size, cfg.dataset.max_crop_size)
+    train_dataset, val_dataset, collate_fn = create_dataset(
+        cfg.dataset.name,
+        train_transform=train_transform,
+        val_transform=val_transform,
+        num_proc=cfg.dataset.num_proc,
     )
     train_dataset = split_dataset_by_node(
         train_dataset, rank=trainer.global_rank, world_size=trainer.world_size
@@ -357,14 +362,14 @@ def main(cfg: DictConfig) -> None:
         batch_size=cfg.dataset.batch_size,
         shuffle=True,
         num_workers=cfg.dataset.num_workers,
-        collate_fn=celeba_hq_collate_fn,
+        collate_fn=collate_fn,
     )
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
         batch_size=cfg.dataset.batch_size,
         shuffle=False,
         num_workers=cfg.dataset.num_workers,
-        collate_fn=celeba_hq_collate_fn,
+        collate_fn=collate_fn,
     )
 
     model = VAEModel(cfg, vae)

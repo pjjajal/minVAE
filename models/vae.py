@@ -25,6 +25,7 @@ class VAE(nn.Module):
         prior="gaussian",
     ):
         super().__init__()
+        z_factor = 2 if prior == "gaussian" else 1
         self.z_channels = z_channels
         self.spatial_compression = spatial_compression
 
@@ -57,7 +58,7 @@ class VAE(nn.Module):
             attn_resolutions=attn_resolutions,
             dropout=dropout,
             resolution=self.resolution,
-            z_channels=int(2 * z_channels), # double channels for mean and variance
+            z_channels=int(z_factor * z_channels), # double channels for mean and variance
             spatial_compression=spatial_compression,
         )
         self.decoder = Decoder(
