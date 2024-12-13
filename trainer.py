@@ -28,8 +28,8 @@ from torchmetrics.image import (
 )
 from torchvision.utils import make_grid
 
-import utils.loss as losses
-import utils.schedulers as schedulers
+import helpers.loss as losses
+import helpers.schedulers as schedulers
 from dataset import create_dataset
 from dataset.transforms import base_train_transform, val_transform
 from models.gan import DinoPatchDiscriminator
@@ -107,16 +107,17 @@ class VAEModel(L.LightningModule):
             )
 
         # Perceptual loss
+        self.preprocess = None
         if self.use_perceptual_loss:
             if cfg.loss.perceptual_loss.type == "lpips":
                 self.perceptual_loss = LearnedPerceptualImagePatchSimilarity(
                     net_type=cfg.loss.perceptual_loss.model_name,
                 )
             elif cfg.loss.perceptual_loss.type == "dreamsim":
-                self.perceptual_loss = dreamsim(
+                self.perceptual_loss, self.preprocess = dreamsim(
                     dreamsim_type=cfg.loss.perceptual_loss.model_name,
                     pretrained=True,
-                    device=self.device,
+                    cache_dir=cfg.loss.perceptual_loss.dreamsim_cache,
                 )
 
         # metrics
@@ -166,9 +167,8 @@ class VAEModel(L.LightningModule):
             vae_loss += g_loss
         perceptual_loss = 0.0
         if self.use_perceptual_loss:
-            perceptual_loss = self.perceptual_weight * self.perceptual_loss(
-                reconstruction.clamp(-1, 1), x
-            )
+            perceptual_loss = self.perceptual_loss(reconstruction.clamp(-1, 1), x)
+            perceptual_loss = self.perceptual_weight * perceptual_loss.mean()
             vae_loss += perceptual_loss
 
         vae_opt.zero_grad()
@@ -320,11 +320,12 @@ def main(cfg: DictConfig) -> None:
         max_steps=cfg.optimizer.total_steps,
         use_distributed_sampler=cfg.dataset.use_distributed_sampler,
         benchmark=True,
+        enable_checkpointing=False
     )
 
     # create model
+    vae_cfg = cfg.model.vae_type
     model_cfg = OmegaConf.to_container(cfg.model.config, resolve=True)
-    vae_cfg = OmegaConf.to_container(cfg.model.vae_type, resolve=True)
     if vae_cfg.type == "continuous":
         vae = VAE(prior=vae_cfg.latent, **model_cfg)
     elif vae_cfg.type == "discrete":
@@ -342,11 +343,13 @@ def main(cfg: DictConfig) -> None:
     train_transform = base_train_transform(
         cfg.dataset.image_size, cfg.dataset.augmentations.horizontal_flip
     )
-    val_transform = val_transform(cfg.dataset.image_size, cfg.dataset.max_crop_size)
+    validation_transform = val_transform(
+        cfg.dataset.image_size, cfg.dataset.max_crop_size
+    )
     train_dataset, val_dataset, collate_fn = create_dataset(
         cfg.dataset.name,
         train_transform=train_transform,
-        val_transform=val_transform,
+        val_transform=validation_transform,
         num_proc=cfg.dataset.num_proc,
     )
     train_dataset = split_dataset_by_node(

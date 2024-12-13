@@ -12,7 +12,7 @@ trainer:
   precision: bf16-mixed
 
   # logging settings
-  wandb: false
+  wandb: true
   wandb_project: minVAE
   log_every_n_steps: 10
   gradnorm_logging: false
@@ -30,7 +30,7 @@ model:
     in_channels: 3
     out_channels: 3
     # base number of channels in the encoder and decoder.
-    channels: 32
+    channels: 128
     # how the channels change in the encoder and decoder.
     channels_mult: [2, 4, 4]
     # number of residual blocks in the upsampling (dec.) and downsampling (enc.) path.
@@ -84,10 +84,11 @@ loss:
   kl_weight: 1.0
 
   perceptual_loss:
-    enable: true
-    type: lpips
-    model_name: vgg
+    enable: false
+    type: dreamsim
+    model_name: ensemble
     weight: 1.0
+    dreamsim_cache: "./dreamsim_cache"
 
   adversarial_loss:
     enable: false
