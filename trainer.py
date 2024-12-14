@@ -36,6 +36,15 @@ from models.gan import DinoPatchDiscriminator
 from models.vae import VAE
 from models.vqvae import VQVAE
 
+try:
+    from distributed_shampoo.distributed_shampoo import DistributedShampoo
+    from distributed_shampoo.shampoo_types import AdamGraftingConfig
+
+    SHAMPOO_AVAILABLE = True
+except ImportError:
+    print("Distributed Shampoo not available")
+    SHAMPOO_AVAILABLE = False
+
 DEFAULT_CHECKPOINTS_PATH = Path("./checkpoints")
 
 torch.set_float32_matmul_precision("medium")
@@ -229,6 +238,22 @@ class VAEModel(L.LightningModule):
                 lr=optimizer_cfg.lr,
                 betas=optimizer_cfg.betas,
                 weight_decay=optimizer_cfg.weight_decay,
+            )
+        elif optimizer_cfg.optimizer == "shampoo":
+            optimizer = DistributedShampoo(
+                self.model.parameters(),
+                lr=optimizer_cfg.lr,
+                betas=optimizer_cfg.betas,
+                epsilon=1e-12,
+                weight_decay=optimizer_cfg.weight_decay,
+                precondition_frequency=optimizer_cfg.preconditioning_frequency,
+                max_preconditioner_dim=optimizer_cfg.max_preconditioner_dim,
+                start_preconditioning_step=optimizer_cfg.start_preconditioning_step,
+                use_decoupled_weight_decay=True,
+                grafting_config=AdamGraftingConfig(
+                    beta2=optimizer_cfg.betas[-1],
+                    epsilon=1e-8,
+                ),
             )
 
         if optimizer_cfg.schedule == "cosine":
