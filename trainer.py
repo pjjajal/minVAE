@@ -83,6 +83,8 @@ class VAEModel(L.LightningModule):
         # which losses to use
         self.use_adversarial_loss = cfg.loss.adversarial_loss.enable
         self.use_perceptual_loss = cfg.loss.perceptual_loss.enable
+        
+        self.discriminator_warmup = cfg.optimizer.discriminator.discriminator_warmup
 
         # Loss weights
         self.kl_weight = cfg.loss.kl_weight
@@ -143,7 +145,7 @@ class VAEModel(L.LightningModule):
 
         # optimize discriminator
         d_loss = 0.0
-        if self.use_adversarial_loss:
+        if self.use_adversarial_loss and self.global_step > self.discriminator_warmup:
             d_pred_real = self.discriminator(x)
             d_pred = self.discriminator(reconstruction.detach())
             d_loss = self.adverasarial_loss(d_pred_real, d_pred)
@@ -161,7 +163,7 @@ class VAEModel(L.LightningModule):
         vae_loss = reconstruction_loss + kl_loss
 
         g_loss = 0.0
-        if self.use_adversarial_loss:
+        if self.use_adversarial_loss and self.global_step > self.discriminator_warmup:
             d_pred = self.discriminator(reconstruction)
             g_loss = self.adversarial_weight * self.generator_loss(d_pred)
             vae_loss += g_loss
@@ -202,11 +204,12 @@ class VAEModel(L.LightningModule):
         psnr = self.psnr(reconstruction, x)
         ssim = self.ssim(reconstruction, x)
 
-        grid = make_grid(x.clamp(-1, 1))
-        self.logger.log_image("val/val_images", [grid])
+        if self.global_rank == 0 and batch_idx == 0:
+            grid = make_grid(x.clamp(-1, 1))
+            self.logger.log_image("val/val_images", [grid])
 
-        grid = make_grid(reconstruction.clamp(-1, 1))
-        self.logger.log_image("val/reconstruction_images", [grid])
+            grid = make_grid(reconstruction.clamp(-1, 1))
+            self.logger.log_image("val/reconstruction_images", [grid])
 
         self.log_dict(
             {

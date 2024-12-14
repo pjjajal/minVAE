@@ -47,7 +47,7 @@ model:
     # spatial compression controls how much to
     spatial_compression: 8
     # wavelet settings
-    wavelet: "" # supports the wavelets from PyWavelets
+    wavelet: "haar" # supports the wavelets from PyWavelets
     maxlevel: 2 # number of levels to apply wavelet transform
     # type
   vae_type:
@@ -82,7 +82,7 @@ dataset:
 
 loss:
   # reconstruction loss
-  recon_loss: l2
+  recon_loss: l1
   # kl loss weight
   kl_weight: 1.0e-6
 
@@ -103,9 +103,9 @@ optimizer:
   # general settings
   total_steps: 100_000
   optimizer: adamw
-  lr: 4.5e-6
+  lr: 4.5e-5
   weight_decay: 1e-3
-  betas: [0.5, 0.90]
+  betas: [0.90, 0.95]
   grad_clip: null
   ema: null
   accumulate_grad_batches: 1 # this is not implemented.
@@ -124,7 +124,7 @@ optimizer:
   discriminator:
     head_only: true
     optimizer: adamw
-    lr: 1e-3
+    lr: 1e-5
     weight_decay: 1e-3
     betas: [0.9, 0.95]
-    discriminator_warmup: 0
+    discriminator_warmup: 2000
