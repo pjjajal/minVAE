@@ -6,12 +6,6 @@ import torch.nn.functional as F
 from einops import rearrange, pack, unpack
 
 
-def round_ste(z: torch.Tensor) -> torch.Tensor:
-    """Round with straight through gradients."""
-    zhat = z.round()
-    return z + (zhat - z).detach()
-
-
 def pack_one(t, pattern):
     return pack([t], pattern)
 
@@ -20,15 +14,63 @@ def unpack_one(t, ps, pattern):
     return unpack(t, ps, pattern)[0]
 
 
+def get_very_efficient_rotation(u, q, e):
+    e = rearrange(e, "b d -> b 1 d")
+    w = ((u + q) / torch.norm(u + q, dim=1, keepdim=True)).detach()
+    e = (
+        e
+        - 2 * (e @ rearrange(w, "b d -> b d 1") @ rearrange(w, "b d -> b 1 d"))
+        + 2
+        * (
+            e
+            @ rearrange(u, "b d -> b d 1").detach()
+            @ rearrange(q, "b d -> b 1 d").detach()
+        )
+    )
+    return e
+
+
+def round_rot(z: torch.Tensor) -> torch.Tensor:
+    """Round with rotation-trick."""
+    b, l, c, d = z.shape
+    e = z
+    q = e.round()
+
+    # rearrage
+    e, ps = pack_one(e, "* d")
+    q, _ = pack_one(q, "* d")
+    lam = (q.norm(dim=1, keepdim=True) / e.norm(dim=1, keepdim=True)).detach()
+
+    # rotation trick
+    q = (
+        lam
+        * get_very_efficient_rotation(
+            e / (torch.norm(e, dim=1, keepdim=True) + 1e-6),
+            q / (torch.norm(q, dim=1, keepdim=True) + 1e-6),
+            e,
+        ).squeeze()
+    )
+    q = unpack_one(q, ps, "* d")
+    return q
+
+
+def round_ste(z: torch.Tensor) -> torch.Tensor:
+    """Round with straight through gradients."""
+    zhat = z.round()
+    return z + (zhat - z).detach()
+
+
 class FSQuantizer(nn.Module):
     def __init__(
         self,
         levels: list[int],
         input_dim: int,
         num_codebooks: int = 1,
+        rotate: bool = False,
         **kwargs,
     ):
         super().__init__()
+        self.rotate = rotate  # use rotation trick
         self.dtype = torch.float32
         _levels = torch.tensor(levels, dtype=torch.int32)
         self.register_buffer("_levels", _levels)
@@ -78,7 +120,10 @@ class FSQuantizer(nn.Module):
 
     def quantize(self, z: torch.Tensor) -> torch.Tensor:
         """Quantizes z, returns quantized zhat, same shape as z."""
-        quantized = round_ste(self.bound(z))
+        if self.rotate:
+            quantized = round_rot(self.bound(z))
+        else:
+            quantized = round_ste(self.bound(z))
         half_width = self._levels // 2  # Renormalize to [-1, 1].
         return quantized / half_width
 

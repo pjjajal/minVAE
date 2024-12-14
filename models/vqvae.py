@@ -24,6 +24,7 @@ class VQVAE(nn.Module):
         levels: list[int],
         embedding_dim: int,
         num_codebooks: int = 1,
+        rotate: bool = False,
         wavelet: str = None,
         maxlevel: int = 1,
     ):
@@ -79,7 +80,10 @@ class VQVAE(nn.Module):
         self.post_quant_conv = nn.Conv2d(effective_embedding_dim, z_channels, 1)
         if quantization == "fsq":
             self.quantizer = FSQuantizer(
-                levels=levels, input_dim=effective_embedding_dim, num_codebooks=num_codebooks
+                levels=levels,
+                input_dim=effective_embedding_dim,
+                num_codebooks=num_codebooks,
+                rotate=rotate,
             )
 
     def encode(self, x: torch.Tensor):

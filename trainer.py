@@ -361,6 +361,7 @@ def main(cfg: DictConfig) -> None:
             quantization=vae_cfg.quantization,
             levels=vae_cfg.levels,
             num_codebooks=vae_cfg.num_codebooks,
+            rotate=vae_cfg.rotate,
             **model_cfg,
         )
 
