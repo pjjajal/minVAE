@@ -30,7 +30,7 @@ model:
     in_channels: 3
     out_channels: 3
     # base number of channels in the encoder and decoder.
-    channels: 32
+    channels: 128
     # how the channels change in the encoder and decoder.
     channels_mult: [2, 4, 4]
     # number of residual blocks in the upsampling (dec.) and downsampling (enc.) path.
@@ -42,29 +42,30 @@ model:
     resolution: 256
     # latent size, for VAE the encoder predicts 2 * latent_size.
     # representing the mean and logvar of the latent distribution.
-    z_channels: 16
+    z_channels: 256
     # spatial compression controls how much to
     spatial_compression: 8
     # wavelet settings
-    wavelet: db4 # supports the wavelets from PyWavelets
+    wavelet: haar # supports the wavelets from PyWavelets
     maxlevel: 2 # number of levels to apply wavelet transform
     # type
   vae_type:
-    type: continuous
-    latent: gaussian
+    type: discrete # continuous or discrete
+    latent: identity
     # discrete
     quantization: fsq
     levels: [7, 5, 5, 5]
     num_codebooks: 1
     embedding_dim: 4
 
+
 dataset:
   num_proc: 1
-  name: celeba
+  name: celeba-hq
   num_classes: 0
   data_path: null
-  image_size: 64
-  max_crop_size: 64
+  image_size: 256
+  max_crop_size: 256
   augmentations:
     horizontal_flip: true
 
@@ -82,19 +83,20 @@ loss:
   # reconstruction loss
   recon_loss: l1-smooth
   # kl loss weight
-  kl_weight: 1.0e-6
+  kl_weight: 1.0
 
   perceptual_loss:
     enable: false
-    type: lpips
-    model_name: vgg
+    type: dreamsim
+    model_name: ensemble
     weight: 1.0
+    dreamsim_cache: "./dreamsim_cache"
 
   adversarial_loss:
-    enable: false
+    enable: true
     weight: 1.0
     discriminator: small
-    loss_type: bce # bce or hinge
+    loss_type: hinge # bce or hinge
 
 optimizer:
   # general settings

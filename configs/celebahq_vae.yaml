@@ -14,6 +14,7 @@ trainer:
   # logging settings
   wandb: true
   wandb_project: minVAE
+  wandb_save_dir: "."
   log_every_n_steps: 10
   gradnorm_logging: false
   rich_print: true
@@ -30,27 +31,27 @@ model:
     in_channels: 3
     out_channels: 3
     # base number of channels in the encoder and decoder.
-    channels: 32
+    channels: 128
     # how the channels change in the encoder and decoder.
-    channels_mult: [2, 4, 4]
+    channels_mult: [1, 2, 4, 4]
     # number of residual blocks in the upsampling (dec.) and downsampling (enc.) path.
     num_res_blocks: 2
     # resolution at which to apply self-attention in the encoder downsampling.
-    attn_resolutions: [32]
+    attn_resolutions: []
     dropout: 0.0
     # input resolution
     resolution: 256
     # latent size, for VAE the encoder predicts 2 * latent_size.
     # representing the mean and logvar of the latent distribution.
-    z_channels: 16
+    z_channels: 4
     # spatial compression controls how much to
     spatial_compression: 8
     # wavelet settings
-    wavelet: db4 # supports the wavelets from PyWavelets
+    wavelet: "" # supports the wavelets from PyWavelets
     maxlevel: 2 # number of levels to apply wavelet transform
     # type
   vae_type:
-    type: continuous
+    type: continuous # continuous or discrete
     latent: gaussian
     # discrete
     quantization: fsq
@@ -58,13 +59,14 @@ model:
     num_codebooks: 1
     embedding_dim: 4
 
+
 dataset:
   num_proc: 1
-  name: celeba
+  name: celeba-hq
   num_classes: 0
   data_path: null
-  image_size: 64
-  max_crop_size: 64
+  image_size: 256
+  max_crop_size: 256
   augmentations:
     horizontal_flip: true
 
@@ -80,19 +82,20 @@ dataset:
 
 loss:
   # reconstruction loss
-  recon_loss: l1-smooth
+  recon_loss: l2
   # kl loss weight
   kl_weight: 1.0e-6
 
   perceptual_loss:
-    enable: false
+    enable: true
     type: lpips
     model_name: vgg
-    weight: 1.0
+    weight: 0.1
+    dreamsim_cache: "./dreamsim_cache"
 
   adversarial_loss:
-    enable: false
-    weight: 1.0
+    enable: true
+    weight: 0.5
     discriminator: small
     loss_type: bce # bce or hinge
 
@@ -100,9 +103,9 @@ optimizer:
   # general settings
   total_steps: 100_000
   optimizer: adamw
-  lr: 1e-4
+  lr: 4.5e-6
   weight_decay: 1e-3
-  betas: [0.9, 0.95]
+  betas: [0.5, 0.90]
   grad_clip: null
   ema: null
   accumulate_grad_batches: 1 # this is not implemented.
@@ -113,15 +116,15 @@ optimizer:
   start_preconditioning_step: null
   # scheduler settings
   schedule: cosine
-  warmup_steps: 500
-  warmup_lr: 1e-6
+  warmup_steps: 1000
+  warmup_lr: 1e-8
   min_lr: 0.0
   power: null
   # discriminator optimizer settings
   discriminator:
     head_only: true
     optimizer: adamw
-    lr: 1e-4
+    lr: 1e-3
     weight_decay: 1e-3
     betas: [0.9, 0.95]
     discriminator_warmup: 0

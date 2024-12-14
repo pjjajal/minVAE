@@ -293,7 +293,7 @@ def main(cfg: DictConfig) -> None:
 
     # wandb logger
     if cfg.trainer.wandb:
-        wandb_logger = WandbLogger(project=cfg.trainer.wandb_project)
+        wandb_logger = WandbLogger(project=cfg.trainer.wandb_project, save_dir=cfg.trainer.wandb_save_dir)
 
     callbacks = []
     # lr monitor
