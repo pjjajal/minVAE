@@ -131,6 +131,7 @@ class VAEModel(L.LightningModule):
                     cache_dir=cfg.loss.perceptual_loss.dreamsim_cache,
                 )
 
+
         # metrics
         self.psnr = PeakSignalNoiseRatio()
         self.ssim = StructuralSimilarityIndexMeasure()
@@ -361,6 +362,7 @@ def main(cfg: DictConfig) -> None:
             quantization=vae_cfg.quantization,
             levels=vae_cfg.levels,
             num_codebooks=vae_cfg.num_codebooks,
+            embedding_dim=vae_cfg.embedding_dim,
             rotate=vae_cfg.rotate,
             **model_cfg,
         )
@@ -398,9 +400,9 @@ def main(cfg: DictConfig) -> None:
     )
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
-        batch_size=cfg.dataset.batch_size,
+        batch_size=cfg.dataset.val_batch_size,
         shuffle=False,
-        num_workers=cfg.dataset.num_workers,
+        num_workers=cfg.dataset.val_num_workers,
         collate_fn=collate_fn,
     )
 

@@ -47,22 +47,22 @@ model:
     # spatial compression controls how much to
     spatial_compression: 8
     # wavelet settings
-    wavelet: "haar" # supports the wavelets from PyWavelets
+    wavelet: "" # supports the wavelets from PyWavelets
     maxlevel: 2 # number of levels to apply wavelet transform
     # type
   vae_type:
-    type: discrete # continuous or discrete
+    type: continuous # continuous or discrete
     latent: gaussian
     # discrete
     quantization: fsq
     levels: [7, 5, 5, 5, 5]
     num_codebooks: 1
     embedding_dim: 5
-    rotate: true
+    rotate: false
 
 
 dataset:
-  num_proc: 1
+  num_proc: 4
   name: imagenet
   num_classes: 0
   data_path: null
@@ -72,8 +72,8 @@ dataset:
     horizontal_flip: true
 
   # dataloader settings
-  batch_size: 32
-  num_workers: 8
+  batch_size: 128
+  num_workers: 32
   val_batch_size: 32
   val_num_workers: 4
   pin_memory: true
@@ -91,6 +91,7 @@ loss:
     enable: true
     type: lpips
     model_name: vgg
+    # model_name: open_clip_vitb32
     weight: 0.1
     dreamsim_cache: "./dreamsim_cache"
 
@@ -102,10 +103,10 @@ loss:
 
 optimizer:
   # general settings
-  total_steps: 100_000
+  total_steps: 100000
   optimizer: adamw
   lr: 2.0e-4
-  weight_decay: 0.0
+  weight_decay: 1.0e-4
   betas: [0.50, 0.9]
   grad_clip: null
   ema: null
@@ -117,7 +118,7 @@ optimizer:
   start_preconditioning_step: 250
   # scheduler settings
   schedule: cosine
-  warmup_steps: 1000
+  warmup_steps: 5000
   warmup_lr: 1e-6
   min_lr: 0.0
   power: null

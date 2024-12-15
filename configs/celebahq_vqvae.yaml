@@ -43,7 +43,7 @@ model:
     resolution: 256
     # latent size, for VAE the encoder predicts 2 * latent_size.
     # representing the mean and logvar of the latent distribution.
-    z_channels: 4
+    z_channels: 256
     # spatial compression controls how much to
     spatial_compression: 8
     # wavelet settings
@@ -88,7 +88,7 @@ loss:
   kl_weight: 1.0e-6
 
   perceptual_loss:
-    enable: true
+    enable: false
     type: lpips
     model_name: vgg
     weight: 0.1
@@ -104,7 +104,7 @@ optimizer:
   # general settings
   total_steps: 100_000
   optimizer: adamw
-  lr: 2.0e-4
+  lr: 1.0e-3
   weight_decay: 0.0
   betas: [0.50, 0.9]
   grad_clip: null
