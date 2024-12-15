@@ -32,7 +32,7 @@ import helpers.loss as losses
 import helpers.schedulers as schedulers
 from dataset import create_dataset
 from dataset.transforms import base_train_transform, val_transform
-from models.gan import DinoPatchDiscriminator
+from models.gan import create_discriminator
 from models.vae import VAE
 from models.vqvae import VQVAE
 
@@ -113,9 +113,7 @@ class VAEModel(L.LightningModule):
             self.generator_loss = partial(
                 losses.generator_loss, type=cfg.loss.adversarial_loss.loss_type
             )
-            self.discriminator = DinoPatchDiscriminator(
-                cfg.loss.adversarial_loss.discriminator
-            )
+            self.discriminator = create_discriminator()
 
         # Perceptual loss
         self.preprocess = None
@@ -157,7 +155,7 @@ class VAEModel(L.LightningModule):
         d_loss = 0.0
         if self.use_adversarial_loss and self.global_step > self.discriminator_warmup:
             d_pred_real = self.discriminator(x)
-            d_pred = self.discriminator(reconstruction.detach())
+            d_pred = self.discriminator(reconstruction.contiguous().detach())
             d_loss = self.adverasarial_loss(d_pred_real, d_pred)
             discriminator_opt.zero_grad()
             self.manual_backward(d_loss)
@@ -174,7 +172,7 @@ class VAEModel(L.LightningModule):
 
         g_loss = 0.0
         if self.use_adversarial_loss and self.global_step > self.discriminator_warmup:
-            d_pred = self.discriminator(reconstruction)
+            d_pred = self.discriminator(reconstruction.contiguous())
             g_loss = self.adversarial_weight * self.generator_loss(d_pred)
             vae_loss += g_loss
         perceptual_loss = 0.0
