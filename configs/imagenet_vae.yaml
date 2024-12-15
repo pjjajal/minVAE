@@ -33,17 +33,17 @@ model:
     # base number of channels in the encoder and decoder.
     channels: 128
     # how the channels change in the encoder and decoder.
-    channels_mult: [2, 4, 4]
+    channels_mult: [1, 2, 4, 4]
     # number of residual blocks in the upsampling (dec.) and downsampling (enc.) path.
     num_res_blocks: 2
     # resolution at which to apply self-attention in the encoder downsampling.
-    attn_resolutions: []
+    attn_resolutions: [ 32 ]
     dropout: 0.0
     # input resolution
     resolution: 128
     # latent size, for VAE the encoder predicts 2 * latent_size.
     # representing the mean and logvar of the latent distribution.
-    z_channels: 256
+    z_channels: 8
     # spatial compression controls how much to
     spatial_compression: 4
     # wavelet settings
@@ -51,13 +51,13 @@ model:
     maxlevel: 2 # number of levels to apply wavelet transform
     # type
   vae_type:
-    type: discrete # continuous or discrete
+    type: continuous # continuous or discrete
     latent: gaussian
     # discrete
     quantization: fsq
-    levels: [8, 8, 8, 5, 5, 5]
+    levels: [7, 5, 5, 5, 5]
     num_codebooks: 1
-    embedding_dim: 6
+    embedding_dim: 5
     rotate: false
 
 
@@ -85,7 +85,7 @@ loss:
   # reconstruction loss
   recon_loss: l1
   # kl loss weight
-  kl_weight: 1.0e-6
+  kl_weight: 1.0e-5
 
   perceptual_loss:
     enable: true
@@ -96,8 +96,8 @@ loss:
     dreamsim_cache: "./dreamsim_cache"
 
   adversarial_loss:
-    enable: false
-    weight: 0.5
+    enable: true
+    weight: 0.8
     discriminator: small
     loss_type: bce # bce or hinge
 
@@ -105,7 +105,7 @@ optimizer:
   # general settings
   total_steps: 100000
   optimizer: adamw
-  lr: 2.0e-4
+  lr: 1.0e-4
   weight_decay: 1.0e-4
   betas: [0.50, 0.9]
   grad_clip: null
@@ -128,5 +128,5 @@ optimizer:
     optimizer: adamw
     lr: 2e-4
     weight_decay: 0.0
-    betas: [0.5, 0.9]
-    discriminator_warmup: 2500
+    betas: [0.9, 0.95]
+    discriminator_warmup: 15000

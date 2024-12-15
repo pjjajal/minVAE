@@ -287,13 +287,12 @@ class VAEModel(L.LightningModule):
         discriminator_cfg = optimizer_cfg.discriminator
         if discriminator_cfg.optimizer == "adamw":
             discriminator_optimizer = torch.optim.AdamW(
-                self.discriminator.trainable_parameters(
-                    head_only=discriminator_cfg.head_only
-                ),
+                self.discriminator.parameters(),
                 lr=discriminator_cfg.lr,
                 betas=discriminator_cfg.betas,
                 weight_decay=discriminator_cfg.weight_decay,
             )
+
 
         return (
             {
