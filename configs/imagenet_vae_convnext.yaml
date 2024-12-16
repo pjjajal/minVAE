@@ -1,0 +1,132 @@
+defaults:
+  - override hydra/job_logging: none
+
+seed: 0
+
+trainer:
+  devices: 1
+  num_nodes: 1
+  # For available strategies look at the PyTorch Lightning docs.
+  strategy: ddp_find_unused_parameters_true
+  # Look at the PyTorch Lightning docs for available precision.
+  precision: bf16-mixed
+
+  # logging settings
+  wandb: true
+  wandb_project: minVAE
+  wandb_save_dir: "."
+  log_every_n_steps: 10
+  gradnorm_logging: false
+  rich_print: false
+
+  # checkpointing settings
+  checkpoint_save_dir: null
+  checkpoint_name: null
+  save_loc: null # no need to specify this.
+
+model:
+  compile: true
+  config:
+    # num channels in input and output
+    in_channels: 3
+    out_channels: 3
+    # base number of channels in the encoder and decoder.
+    channels: 128
+    # how the channels change in the encoder and decoder.
+    channels_mult: [1, 2, 4, 4]
+    # number of residual blocks in the upsampling (dec.) and downsampling (enc.) path.
+    num_res_blocks: 2
+    # resolution at which to apply self-attention in the encoder downsampling.
+    attn_resolutions: [  ]
+    dropout: 0.0
+    # input resolution
+    resolution: 128
+    # latent size, for VAE the encoder predicts 2 * latent_size.
+    # representing the mean and logvar of the latent distribution.
+    z_channels: 16
+    # spatial compression controls how much to
+    spatial_compression: 4
+    # wavelet settings
+    wavelet: "haar" # supports the wavelets from PyWavelets
+    maxlevel: 2 # number of levels to apply wavelet transform
+    block_fn: "convnext"
+  vae_type:
+    type: continuous # continuous or discrete
+    latent: gaussian
+    # discrete
+    quantization: fsq
+    levels: [7, 5, 5, 5, 5]
+    num_codebooks: 1
+    embedding_dim: 5
+    rotate: false
+
+
+dataset:
+  num_proc: 4
+  name: imagenet
+  num_classes: 0
+  data_path: null
+  image_size: 128
+  max_crop_size: 128
+  augmentations:
+    horizontal_flip: true
+
+  # dataloader settings
+  batch_size: 128
+  num_workers: 32
+  val_batch_size: 32
+  val_num_workers: 4
+  pin_memory: true
+
+  # distributed sampler
+  use_distributed_sampler: false
+
+loss:
+  # reconstruction loss
+  recon_loss: l1
+  # kl loss weight
+  kl_weight: 1.0e-5
+
+  perceptual_loss:
+    enable: true
+    type: lpips
+    model_name: vgg
+    # model_name: open_clip_vitb32
+    weight: 0.1
+    dreamsim_cache: "./dreamsim_cache"
+
+  adversarial_loss:
+    enable: true
+    weight: 0.8
+    discriminator: small
+    loss_type: bce # bce or hinge
+
+optimizer:
+  # general settings
+  total_steps: 200000
+  optimizer: adamw
+  lr: 1.5e-4
+  weight_decay: 1.0e-4
+  betas: [0.90, 0.95]
+  grad_clip: null
+  ema: null
+  accumulate_grad_batches: 1 # this is not implemented.
+  overfit_batches: 0.0 # for debugging purposes, [0.0, 1.0]
+  # shampoo specific settings
+  preconditioning_frequency: 50
+  max_preconditioner_dim: 8192
+  start_preconditioning_step: 250
+  # scheduler settings
+  schedule: cosine
+  warmup_steps: 10000
+  warmup_lr: 1e-7
+  min_lr: 0.0
+  power: null
+  # discriminator optimizer settings
+  discriminator:
+    head_only: false
+    optimizer: adamw
+    lr: 1.0e-5
+    weight_decay: 0.0
+    betas: [0.9, 0.95]
+    discriminator_warmup: 20000

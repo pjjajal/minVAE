@@ -15,6 +15,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
+from timm.layers import trunc_normal_
+
 
 
 def get_block_fn(block_type: str):
@@ -103,6 +105,8 @@ class ConvNeXtBlock(nn.Module):
             else nn.Identity()
         )
 
+        self.apply(self._init_weights)
+
     def forward(self, x):
         h = x
         h = self.convdw1(h)
@@ -116,6 +120,11 @@ class ConvNeXtBlock(nn.Module):
 
         x = self.up_proj(h) + self.nin_shortcut(x)
         return x
+    
+    def _init_weights(self, m):
+        if isinstance(m, (nn.Conv2d, nn.Linear)):
+            trunc_normal_(m.weight, std=.02)
+            nn.init.constant_(m.bias, 0)
 
 
 class ResnetBlock(nn.Module):
