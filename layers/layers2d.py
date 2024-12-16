@@ -17,7 +17,13 @@ import torch.nn.functional as F
 from einops import rearrange
 
 
-from .wavelet import WaveletTransform
+def get_block_fn(block_type: str):
+    if block_type == "resnet":
+        return ResnetBlock
+    elif block_type == "convnext":
+        return ConvNeXtBlock
+    else:
+        raise ValueError(f"block type {block_type} not supported.")
 
 
 def nonlinearity(x: torch.Tensor) -> torch.Tensor:
@@ -49,6 +55,67 @@ class Downsample(nn.Module):
         pad = (0, 1, 0, 1)
         x = F.pad(x, pad, mode="constant", value=0)
         return self.conv(x)
+
+
+class GRN(nn.Module):
+    """GRN (Global Response Normalization) layer"""
+
+    def __init__(self, dim):
+        super().__init__()
+        self.gamma = nn.Parameter(torch.zeros(1, 1, 1, dim))
+        self.beta = nn.Parameter(torch.zeros(1, 1, 1, dim))
+
+    def forward(self, x):
+        Gx = torch.norm(x, p=2, dim=(1, 2), keepdim=True)
+        Nx = Gx / (Gx.mean(dim=-1, keepdim=True) + 1e-6)
+        return self.gamma * (x * Nx) + self.beta + x
+
+
+class ConvNeXtBlock(nn.Module):
+    def __init__(
+        self, *, in_channels: int, out_channels: int = None, dropout: float, **kwargs
+    ):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels or in_channels
+
+        self.convdw1 = nn.Conv2d(
+            in_channels,
+            in_channels,
+            kernel_size=7,
+            padding=3,
+            groups=in_channels,
+        )
+        self.norm1 = nn.LayerNorm(in_channels)
+        self.pwconv1_1 = nn.Linear(in_channels, 4 * in_channels)
+        self.act1 = nn.GELU()
+        self.gn1 = GRN(4 * in_channels)
+        self.pwconv1_2 = nn.Linear(4 * in_channels, in_channels)
+
+        self.up_proj = (
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1)
+            if in_channels != out_channels
+            else nn.Identity()
+        )
+        self.nin_shortcut = (
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1)
+            if in_channels != out_channels
+            else nn.Identity()
+        )
+
+    def forward(self, x):
+        h = x
+        h = self.convdw1(h)
+        h = rearrange(h, "b c h w -> b h w c")
+        h = self.norm1(h)
+        h = self.pwconv1_1(h)
+        h = self.act1(h)
+        h = self.gn1(h)
+        h = self.pwconv1_2(h)
+        h = rearrange(h, "b h w c -> b c h w")
+
+        x = self.up_proj(h) + self.nin_shortcut(x)
+        return x
 
 
 class ResnetBlock(nn.Module):
@@ -292,7 +359,7 @@ class Decoder(nn.Module):
                 up.upsample = Upsample(block_in)
                 curr_resolution *= 2
             self.up.append(up)
-        
+
         # output projection.
         self.norm_out = Normalize(block_in)
         self.conv_out = nn.Conv2d(

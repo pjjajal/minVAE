@@ -47,7 +47,7 @@ model:
     # wavelet settings
     wavelet: haar # supports the wavelets from PyWavelets
     maxlevel: 2 # number of levels to apply wavelet transform
-    # type
+    block_fn: "resnet"
   vae_type:
     type: discrete # continuous or discrete
     latent: identity
