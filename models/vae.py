@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from layers.distributions import GaussianDistribution, IdentityDistribution
-from layers.layers2d import Encoder, Decoder
+from layers.layers2d import Encoder, Decoder, ResnetBlock
 from layers.wavelet import WaveletTransform, IdentityTransform
 
 
@@ -20,6 +20,7 @@ class VAE(nn.Module):
         resolution: int,
         z_channels: int,
         spatial_compression: int,
+        block_fn=ResnetBlock,
         wavelet: str = None,
         maxlevel: int = 1,
         prior="gaussian",
@@ -60,6 +61,7 @@ class VAE(nn.Module):
             resolution=self.resolution,
             z_channels=int(z_factor * z_channels), # double channels for mean and variance
             spatial_compression=spatial_compression,
+            block_fn=block_fn
         )
         self.decoder = Decoder(
             z_channels=z_channels,
@@ -71,6 +73,7 @@ class VAE(nn.Module):
             resolution=self.resolution,
             out_channels=self.out_channels,
             spatial_compression=spatial_compression,
+            block_fn=block_fn
         )
         self.quant_conv = nn.Conv2d(int(z_factor * z_channels), int(z_factor * z_channels), 1)
         self.post_quant_conv = nn.Conv2d(z_channels, z_channels, 1)

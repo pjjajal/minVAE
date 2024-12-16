@@ -133,6 +133,7 @@ class Encoder(nn.Module):
         resolution: int,
         z_channels: int,
         spatial_compression: int,
+        block_fn: nn.Module = ResnetBlock,
     ):
         super().__init__()
         self.num_resolutions = len(channels_mult)
@@ -163,7 +164,7 @@ class Encoder(nn.Module):
             block_out = channels * channels_mult[i_level]
             for _ in range(self.num_res_blocks):
                 block.append(
-                    ResnetBlock(
+                    block_fn(
                         in_channels=block_in,
                         out_channels=block_out,
                         dropout=dropout,
@@ -182,11 +183,11 @@ class Encoder(nn.Module):
 
         # middle
         self.mid = nn.Module()
-        self.mid.block1 = ResnetBlock(
+        self.mid.block1 = block_fn(
             in_channels=block_in, out_channels=block_in, dropout=dropout
         )
         self.mid.attn1 = AttnBlock(block_in)
-        self.mid.block2 = ResnetBlock(
+        self.mid.block2 = block_fn(
             in_channels=block_in, out_channels=block_in, dropout=dropout
         )
 
@@ -233,6 +234,7 @@ class Decoder(nn.Module):
         resolution: int,
         out_channels: int,
         spatial_compression: int,
+        block_fn: nn.Module = ResnetBlock,
     ):
         super().__init__()
         self.num_resolutions = len(channels_mult)
@@ -258,11 +260,11 @@ class Decoder(nn.Module):
 
         # middle
         self.mid = nn.Module()
-        self.mid.block1 = ResnetBlock(
+        self.mid.block1 = block_fn(
             in_channels=block_in, out_channels=block_in, dropout=dropout
         )
         self.mid.attn1 = AttnBlock(block_in)
-        self.mid.block2 = ResnetBlock(
+        self.mid.block2 = block_fn(
             in_channels=block_in, out_channels=block_in, dropout=dropout
         )
 
@@ -274,7 +276,7 @@ class Decoder(nn.Module):
             block_out = channels * channels_mult[i_level]
             for _ in range(self.num_res_blocks + 1):
                 block.append(
-                    ResnetBlock(
+                    block_fn(
                         in_channels=block_in,
                         out_channels=block_out,
                         dropout=dropout,
