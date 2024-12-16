@@ -24,6 +24,8 @@ def get_block_fn(block_type: str):
         return ResnetBlock
     elif block_type == "convnext":
         return ConvNeXtBlock
+    elif block_type == "convnext-star":
+        return ConvNeXtStarBlock
     else:
         raise ValueError(f"block type {block_type} not supported.")
 
@@ -114,6 +116,59 @@ class ConvNeXtBlock(nn.Module):
         h = self.norm1(h)
         h = self.pwconv1_1(h)
         h = self.act1(h)
+        h = self.gn1(h)
+        h = self.pwconv1_2(h)
+        h = rearrange(h, "b h w c -> b c h w")
+
+        x = self.up_proj(h) + self.nin_shortcut(x)
+        return x
+    
+    def _init_weights(self, m):
+        if isinstance(m, (nn.Conv2d, nn.Linear)):
+            trunc_normal_(m.weight, std=.02)
+            nn.init.constant_(m.bias, 0)
+
+class ConvNeXtStarBlock(nn.Module):
+    def __init__(
+        self, *, in_channels: int, out_channels: int = None, dropout: float, **kwargs
+    ):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels or in_channels
+
+        self.convdw1 = nn.Conv2d(
+            in_channels,
+            in_channels,
+            kernel_size=7,
+            padding=3,
+            groups=in_channels,
+        )
+        self.norm1 = nn.LayerNorm(in_channels)
+        self.pwconv1_1 = nn.Linear(in_channels, 4 * in_channels)
+        self.act1 = nn.ReLU6()
+        self.gn1 = GRN(2 * in_channels)
+        self.pwconv1_2 = nn.Linear(2 * in_channels, in_channels)
+
+        self.up_proj = (
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1)
+            if in_channels != out_channels
+            else nn.Identity()
+        )
+        self.nin_shortcut = (
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1)
+            if in_channels != out_channels
+            else nn.Identity()
+        )
+
+        self.apply(self._init_weights)
+
+    def forward(self, x):
+        h = x
+        h = self.convdw1(h)
+        h = rearrange(h, "b c h w -> b h w c")
+        h = self.norm1(h)
+        h1, h2 = self.pwconv1_1(h).chunk(2, dim=-1)
+        h = self.act1(h1) * h2
         h = self.gn1(h)
         h = self.pwconv1_2(h)
         h = rearrange(h, "b h w c -> b c h w")

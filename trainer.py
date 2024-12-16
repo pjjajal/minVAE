@@ -5,6 +5,7 @@ from pathlib import Path
 
 import hydra
 import lightning as L
+import lpips
 import numpy as np
 import torch
 import torch.nn as nn
@@ -22,7 +23,6 @@ from lightning.pytorch.utilities import grad_norm
 from omegaconf import DictConfig, OmegaConf
 from torchmetrics.image import (
     FrechetInceptionDistance,
-    LearnedPerceptualImagePatchSimilarity,
     PeakSignalNoiseRatio,
     StructuralSimilarityIndexMeasure,
 )
@@ -85,6 +85,7 @@ class VAEModel(L.LightningModule):
         self.model = model
         self.vae_cfg = cfg.model.vae_type
         self.is_discrete = self.vae_cfg.type == "discrete"
+        self.logging_gradnorm = cfg.trainer.gradnorm_logging
 
         # manual optimization.
         self.automatic_optimization = False
@@ -92,7 +93,7 @@ class VAEModel(L.LightningModule):
         # which losses to use
         self.use_adversarial_loss = cfg.loss.adversarial_loss.enable
         self.use_perceptual_loss = cfg.loss.perceptual_loss.enable
-        
+
         self.discriminator_warmup = cfg.optimizer.discriminator.discriminator_warmup
 
         # Loss weights
@@ -118,9 +119,10 @@ class VAEModel(L.LightningModule):
         # Perceptual loss
         self.preprocess = None
         if self.use_perceptual_loss:
+            self.perceptual_loss_type = cfg.loss.perceptual_loss.type
             if cfg.loss.perceptual_loss.type == "lpips":
-                self.perceptual_loss = LearnedPerceptualImagePatchSimilarity(
-                    net_type=cfg.loss.perceptual_loss.model_name,
+                self.perceptual_loss = lpips.LPIPS(
+                    net_type=cfg.loss.perceptual_loss.model_name
                 )
             elif cfg.loss.perceptual_loss.type == "dreamsim":
                 self.perceptual_loss, self.preprocess = dreamsim(
@@ -129,10 +131,20 @@ class VAEModel(L.LightningModule):
                     cache_dir=cfg.loss.perceptual_loss.dreamsim_cache,
                 )
 
+        # EMA Model
+        self.ema_model = torch.optim.swa_utils.AveragedModel(
+            self.model,
+            multi_avg_fn=torch.optim.swa_utils.get_ema_multi_avg_fn(cfg.optimizer.ema),
+        )
 
         # metrics
         self.psnr = PeakSignalNoiseRatio()
         self.ssim = StructuralSimilarityIndexMeasure()
+        self.ema_psnr = PeakSignalNoiseRatio()
+        self.ema_ssim = StructuralSimilarityIndexMeasure()
+
+    def get_layer_layer(self):
+        return self.model.decoder.conv_out
 
     def training_step(self, batch, batch_idx):
         optimizers = self.optimizers()
@@ -153,10 +165,17 @@ class VAEModel(L.LightningModule):
 
         # optimize discriminator
         d_loss = 0.0
-        if self.use_adversarial_loss and self.global_step > self.discriminator_warmup:
+        if self.use_adversarial_loss:
+            adversarial_weight = (
+                self.adversarial_weight
+                if self.global_step > self.discriminator_warmup
+                else 0.0
+            )
             d_pred_real = self.discriminator(x)
             d_pred = self.discriminator(reconstruction.contiguous().detach())
-            d_loss = self.adverasarial_loss(d_pred_real, d_pred)
+            d_loss = self.adversarial_weight * self.adverasarial_loss(
+                d_pred_real, d_pred
+            )
             discriminator_opt.zero_grad()
             self.manual_backward(d_loss)
             discriminator_opt.step()
@@ -171,20 +190,40 @@ class VAEModel(L.LightningModule):
         vae_loss = reconstruction_loss + kl_loss
 
         g_loss = 0.0
-        if self.use_adversarial_loss and self.global_step > self.discriminator_warmup:
+        if self.use_adversarial_loss:
+            adversarial_weight = (
+                self.adversarial_weight
+                if self.global_step > self.discriminator_warmup
+                else 0.0
+            )
             d_pred = self.discriminator(reconstruction.contiguous())
-            g_loss = self.adversarial_weight * self.generator_loss(d_pred)
+            g_loss = self.generator_loss(d_pred)
+            g_loss = (
+                adversarial_weight
+                * losses.calculate_adaptive_weight(
+                    reconstruction_loss, g_loss, self.get_layer_layer()
+                )
+                * g_loss
+            )
             vae_loss += g_loss
         perceptual_loss = 0.0
         if self.use_perceptual_loss:
             perceptual_loss = self.perceptual_loss(reconstruction.clamp(-1, 1), x)
-            perceptual_loss = self.perceptual_weight * perceptual_loss.mean()
+            perceptual_loss = self.perceptual_weight * perceptual_loss.sum()
             vae_loss += perceptual_loss
 
         vae_opt.zero_grad()
         self.manual_backward(vae_loss)
         vae_opt.step()
         vae_schedule.step()
+
+        # update EMA model
+        self.ema_model.update_parameters(self.model)
+
+        # log gradnorm
+        if self.logging_gradnorm:
+            norms = grad_norm(self.model, norm_type=2)
+            self.log_dict(norms, sync_dist=True)
 
         # log losses
         self.log_dict(
@@ -209,8 +248,17 @@ class VAEModel(L.LightningModule):
         else:
             mu, logvar = posteriors
 
+        ema_reconstruction, ema_posteriors = self.ema_model.forward(x)
+        if self.is_discrete:
+            (indices,) = posteriors
+        else:
+            mu, logvar = posteriors
+
         psnr = self.psnr(reconstruction, x)
         ssim = self.ssim(reconstruction, x)
+
+        ema_psnr = self.ema_psnr(ema_reconstruction, x)
+        ema_ssim = self.ema_ssim(ema_reconstruction, x)
 
         if self.global_rank == 0 and batch_idx == 0:
             grid = make_grid(x.clamp(-1, 1))
@@ -223,9 +271,12 @@ class VAEModel(L.LightningModule):
             {
                 "val/psnr": psnr,
                 "val/ssim": ssim,
+                "val/ema_psnr": ema_psnr,
+                "val/ema_ssim": ema_ssim,
             },
             prog_bar=True,
             sync_dist=True,
+            on_epoch=True,
         )
 
     def configure_optimizers(self):
@@ -293,7 +344,6 @@ class VAEModel(L.LightningModule):
                 weight_decay=discriminator_cfg.weight_decay,
             )
 
-
         return (
             {
                 "optimizer": optimizer,
@@ -319,7 +369,9 @@ def main(cfg: DictConfig) -> None:
 
     # wandb logger
     if cfg.trainer.wandb:
-        wandb_logger = WandbLogger(project=cfg.trainer.wandb_project, save_dir=cfg.trainer.wandb_save_dir)
+        wandb_logger = WandbLogger(
+            project=cfg.trainer.wandb_project, save_dir=cfg.trainer.wandb_save_dir
+        )
 
     callbacks = []
     # lr monitor
@@ -346,7 +398,7 @@ def main(cfg: DictConfig) -> None:
         max_steps=cfg.optimizer.total_steps,
         use_distributed_sampler=cfg.dataset.use_distributed_sampler,
         benchmark=True,
-        enable_checkpointing=False
+        enable_checkpointing=False,
     )
 
     # create model

@@ -36,3 +36,11 @@ def generator_loss(fake, type: Literal['bce', 'hinge']):
         return -fake.mean()
     else:
         raise ValueError(f'Unknown loss type: {type}')
+    
+def calculate_adaptive_weight(rec_loss, g_loss, last_layer):
+        nll_grads = torch.autograd.grad(rec_loss, last_layer[0], retain_graph=True)[0]
+        g_grads = torch.autograd.grad(g_loss, last_layer[0], retain_graph=True)[0]
+
+        d_weight = torch.norm(nll_grads) / (torch.norm(g_grads) + 1e-4)
+        d_weight = torch.clamp(d_weight, 0.0, 1e4).detach()
+        return d_weight

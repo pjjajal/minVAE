@@ -109,7 +109,7 @@ optimizer:
   weight_decay: 1.0e-4
   betas: [0.90, 0.95]
   grad_clip: null
-  ema: null
+  ema: 0.999
   accumulate_grad_batches: 1 # this is not implemented.
   overfit_batches: 0.0 # for debugging purposes, [0.0, 1.0]
   # shampoo specific settings
