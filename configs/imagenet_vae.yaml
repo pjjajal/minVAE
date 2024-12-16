@@ -37,17 +37,17 @@ model:
     # number of residual blocks in the upsampling (dec.) and downsampling (enc.) path.
     num_res_blocks: 2
     # resolution at which to apply self-attention in the encoder downsampling.
-    attn_resolutions: [ 32 ]
+    attn_resolutions: [  ]
     dropout: 0.0
     # input resolution
     resolution: 128
     # latent size, for VAE the encoder predicts 2 * latent_size.
     # representing the mean and logvar of the latent distribution.
-    z_channels: 8
+    z_channels: 4
     # spatial compression controls how much to
-    spatial_compression: 4
+    spatial_compression: 8
     # wavelet settings
-    wavelet: "haar" # supports the wavelets from PyWavelets
+    wavelet: "" # supports the wavelets from PyWavelets
     maxlevel: 2 # number of levels to apply wavelet transform
     block_fn: "resnet"
   vae_type:
@@ -72,7 +72,7 @@ dataset:
     horizontal_flip: true
 
   # dataloader settings
-  batch_size: 128
+  batch_size: 32
   num_workers: 32
   val_batch_size: 32
   val_num_workers: 4
@@ -99,17 +99,17 @@ loss:
     enable: true
     weight: 0.8
     discriminator: small
-    loss_type: bce # bce or hinge
+    loss_type: hinge # bce or hinge
 
 optimizer:
   # general settings
-  total_steps: 100000
+  total_steps: 200000
   optimizer: adamw
-  lr: 1.0e-4
+  lr: 1.5e-4
   weight_decay: 1.0e-4
-  betas: [0.50, 0.9]
+  betas: [0.90, 0.95]
   grad_clip: null
-  ema: null
+  ema: 0.999
   accumulate_grad_batches: 1 # this is not implemented.
   overfit_batches: 0.0 # for debugging purposes, [0.0, 1.0]
   # shampoo specific settings
@@ -118,15 +118,15 @@ optimizer:
   start_preconditioning_step: 250
   # scheduler settings
   schedule: cosine
-  warmup_steps: 5000
-  warmup_lr: 1e-6
+  warmup_steps: 10000
+  warmup_lr: 1e-7
   min_lr: 0.0
   power: null
   # discriminator optimizer settings
   discriminator:
     head_only: false
     optimizer: adamw
-    lr: 2e-4
+    lr: 1.0e-5
     weight_decay: 0.0
     betas: [0.9, 0.95]
-    discriminator_warmup: 15000
+    discriminator_warmup: 20000

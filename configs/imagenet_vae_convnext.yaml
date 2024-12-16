@@ -43,11 +43,11 @@ model:
     resolution: 128
     # latent size, for VAE the encoder predicts 2 * latent_size.
     # representing the mean and logvar of the latent distribution.
-    z_channels: 16
+    z_channels: 4
     # spatial compression controls how much to
-    spatial_compression: 4
+    spatial_compression: 8
     # wavelet settings
-    wavelet: "haar" # supports the wavelets from PyWavelets
+    wavelet: "" # supports the wavelets from PyWavelets
     maxlevel: 2 # number of levels to apply wavelet transform
     block_fn: "convnext"
   vae_type:
@@ -72,7 +72,7 @@ dataset:
     horizontal_flip: true
 
   # dataloader settings
-  batch_size: 128
+  batch_size: 32
   num_workers: 32
   val_batch_size: 32
   val_num_workers: 4
@@ -99,7 +99,7 @@ loss:
     enable: true
     weight: 0.8
     discriminator: small
-    loss_type: bce # bce or hinge
+    loss_type: hinge # bce or hinge
 
 optimizer:
   # general settings

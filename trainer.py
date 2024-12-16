@@ -122,7 +122,7 @@ class VAEModel(L.LightningModule):
             self.perceptual_loss_type = cfg.loss.perceptual_loss.type
             if cfg.loss.perceptual_loss.type == "lpips":
                 self.perceptual_loss = lpips.LPIPS(
-                    net_type=cfg.loss.perceptual_loss.model_name
+                    net=cfg.loss.perceptual_loss.model_name
                 )
             elif cfg.loss.perceptual_loss.type == "dreamsim":
                 self.perceptual_loss, self.preprocess = dreamsim(
@@ -144,7 +144,7 @@ class VAEModel(L.LightningModule):
         self.ema_ssim = StructuralSimilarityIndexMeasure()
 
     def get_layer_layer(self):
-        return self.model.decoder.conv_out
+        return self.model.decoder.conv_out.weight
 
     def training_step(self, batch, batch_idx):
         optimizers = self.optimizers()
@@ -173,7 +173,7 @@ class VAEModel(L.LightningModule):
             )
             d_pred_real = self.discriminator(x)
             d_pred = self.discriminator(reconstruction.contiguous().detach())
-            d_loss = self.adversarial_weight * self.adverasarial_loss(
+            d_loss = adversarial_weight * self.adverasarial_loss(
                 d_pred_real, d_pred
             )
             discriminator_opt.zero_grad()
@@ -209,7 +209,7 @@ class VAEModel(L.LightningModule):
         perceptual_loss = 0.0
         if self.use_perceptual_loss:
             perceptual_loss = self.perceptual_loss(reconstruction.clamp(-1, 1), x)
-            perceptual_loss = self.perceptual_weight * perceptual_loss.sum()
+            perceptual_loss = self.perceptual_weight * perceptual_loss.mean()
             vae_loss += perceptual_loss
 
         vae_opt.zero_grad()
