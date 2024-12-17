@@ -35,7 +35,7 @@ model:
     # how the channels change in the encoder and decoder.
     channels_mult: [1, 2, 4, 4]
     # number of residual blocks in the upsampling (dec.) and downsampling (enc.) path.
-    num_res_blocks: 3
+    num_res_blocks: 4
     # resolution at which to apply self-attention in the encoder downsampling.
     attn_resolutions: [  ]
     dropout: 0.0
@@ -49,7 +49,7 @@ model:
     # wavelet settings
     wavelet: "haar" # supports the wavelets from PyWavelets
     maxlevel: 2 # number of levels to apply wavelet transform
-    block_fn: "convnext"
+    block_fn: "convnext-star"
   vae_type:
     type: continuous # continuous or discrete
     latent: gaussian

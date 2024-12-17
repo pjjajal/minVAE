@@ -142,8 +142,10 @@ class VAEModel(L.LightningModule):
         # metrics
         self.psnr = PeakSignalNoiseRatio()
         self.ssim = StructuralSimilarityIndexMeasure()
+        self.fid = FrechetInceptionDistance(normalize=True)
         self.ema_psnr = PeakSignalNoiseRatio()
         self.ema_ssim = StructuralSimilarityIndexMeasure()
+        self.ema_fid = FrechetInceptionDistance(normalize=True)
 
     def get_layer_layer(self):
         return self.model.decoder.conv_out.weight
@@ -151,8 +153,10 @@ class VAEModel(L.LightningModule):
     def training_step(self, batch, batch_idx):
         optimizers = self.optimizers()
         if self.use_adversarial_loss:
+            step_factor = 2
             vae_opt, discriminator_opt = optimizers
         else:
+            step_factor = 1
             vae_opt = optimizers
         vae_schedule = self.lr_schedulers()
 
@@ -170,7 +174,7 @@ class VAEModel(L.LightningModule):
         if self.use_adversarial_loss:
             adversarial_weight = (
                 self.adversarial_weight
-                if self.global_step > self.discriminator_warmup
+                if self.global_step // step_factor > self.discriminator_warmup
                 else 0.0
             )
             d_pred_real = self.discriminator(x)
@@ -193,7 +197,7 @@ class VAEModel(L.LightningModule):
         if self.use_adversarial_loss:
             adversarial_weight = (
                 self.adversarial_weight
-                if self.global_step > self.discriminator_warmup
+                if self.global_step // step_factor > self.discriminator_warmup
                 else 0.0
             )
             d_pred = self.discriminator(reconstruction.contiguous())
@@ -233,6 +237,7 @@ class VAEModel(L.LightningModule):
                 "reconstruction_loss": reconstruction_loss,
                 "kl_loss": kl_loss,
                 "perceptual_loss": perceptual_loss,
+                "gram_loss": gram_loss,
                 "d_loss": d_loss,
                 "g_loss": g_loss,
             },
@@ -258,8 +263,14 @@ class VAEModel(L.LightningModule):
         psnr = self.psnr(reconstruction, x)
         ssim = self.ssim(reconstruction, x)
 
+        self.fid.update(reconstruction.clamp(-1,1) * 0.5 + 0.5, real=False)
+        self.fid.update(x * 0.5 + 0.5, real=True)
+
+
         ema_psnr = self.ema_psnr(ema_reconstruction, x)
         ema_ssim = self.ema_ssim(ema_reconstruction, x)
+        self.ema_fid.update(ema_reconstruction.clamp(-1,1) * 0.5 + 0.5, real=False)
+        self.ema_fid.update(x * 0.5 + 0.5, real=True)
 
         if self.global_rank == 0 and batch_idx == 0:
             grid = make_grid(x.clamp(-1, 1))
@@ -274,6 +285,23 @@ class VAEModel(L.LightningModule):
                 "val/ssim": ssim,
                 "val/ema_psnr": ema_psnr,
                 "val/ema_ssim": ema_ssim,
+            },
+            prog_bar=True,
+            sync_dist=True,
+            on_epoch=True,
+        )
+
+    def on_validation_epoch_end(self) -> None:
+        fid = self.fid.compute()
+        ema_fid = self.ema_fid.compute()
+
+        self.fid.reset()
+        self.ema_fid.reset()
+
+        self.log_dict(
+            {
+                "val/fid": fid,
+                "val/ema_fid": ema_fid
             },
             prog_bar=True,
             sync_dist=True,
