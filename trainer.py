@@ -5,7 +5,6 @@ from pathlib import Path
 
 import hydra
 import lightning as L
-import lpips
 import numpy as np
 import torch
 import torch.nn as nn
@@ -35,6 +34,7 @@ from dataset.transforms import base_train_transform, val_transform
 from models.gan import create_discriminator
 from models.vae import VAE
 from models.vqvae import VQVAE
+from models.perceptual import LPIPS
 
 try:
     from distributed_shampoo.distributed_shampoo import DistributedShampoo
@@ -93,12 +93,14 @@ class VAEModel(L.LightningModule):
         # which losses to use
         self.use_adversarial_loss = cfg.loss.adversarial_loss.enable
         self.use_perceptual_loss = cfg.loss.perceptual_loss.enable
+        self.use_gram_loss = cfg.loss.perceptual_loss.gram_loss.enable
 
         self.discriminator_warmup = cfg.optimizer.discriminator.discriminator_warmup
 
         # Loss weights
         self.kl_weight = cfg.loss.kl_weight
         self.perceptual_weight = cfg.loss.perceptual_loss.weight
+        self.gram_weight = cfg.loss.perceptual_loss.gram_loss.weight
         self.adversarial_weight = cfg.loss.adversarial_loss.weight
 
         # VAE losses
@@ -121,7 +123,7 @@ class VAEModel(L.LightningModule):
         if self.use_perceptual_loss:
             self.perceptual_loss_type = cfg.loss.perceptual_loss.type
             if cfg.loss.perceptual_loss.type == "lpips":
-                self.perceptual_loss = lpips.LPIPS(
+                self.perceptual_loss = LPIPS(
                     net=cfg.loss.perceptual_loss.model_name
                 )
             elif cfg.loss.perceptual_loss.type == "dreamsim":
@@ -173,9 +175,7 @@ class VAEModel(L.LightningModule):
             )
             d_pred_real = self.discriminator(x)
             d_pred = self.discriminator(reconstruction.contiguous().detach())
-            d_loss = adversarial_weight * self.adverasarial_loss(
-                d_pred_real, d_pred
-            )
+            d_loss = adversarial_weight * self.adverasarial_loss(d_pred_real, d_pred)
             discriminator_opt.zero_grad()
             self.manual_backward(d_loss)
             discriminator_opt.step()
@@ -208,9 +208,10 @@ class VAEModel(L.LightningModule):
             vae_loss += g_loss
         perceptual_loss = 0.0
         if self.use_perceptual_loss:
-            perceptual_loss = self.perceptual_loss(reconstruction.clamp(-1, 1), x)
+            perceptual_loss, gram_loss = self.perceptual_loss(reconstruction.clamp(-1, 1), x, ret_gram=self.use_gram_loss)
             perceptual_loss = self.perceptual_weight * perceptual_loss.mean()
-            vae_loss += perceptual_loss
+            gram_loss = self.gram_weight * gram_loss
+            vae_loss += perceptual_loss + gram_loss
 
         vae_opt.zero_grad()
         self.manual_backward(vae_loss)

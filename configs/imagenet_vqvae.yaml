@@ -95,6 +95,10 @@ loss:
     weight: 0.1
     dreamsim_cache: "./dreamsim_cache"
 
+    gram_loss:
+      enable: false
+      weight: 0.5
+
   adversarial_loss:
     enable: false
     weight: 0.5
