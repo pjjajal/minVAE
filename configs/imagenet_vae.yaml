@@ -40,7 +40,7 @@ model:
     attn_resolutions: [  ]
     dropout: 0.0
     # input resolution
-    resolution: 128
+    resolution: 256
     # latent size, for VAE the encoder predicts 2 * latent_size.
     # representing the mean and logvar of the latent distribution.
     z_channels: 4
@@ -72,7 +72,7 @@ dataset:
     horizontal_flip: true
 
   # dataloader settings
-  batch_size: 32
+  batch_size: 256
   num_workers: 32
   val_batch_size: 32
   val_num_workers: 4
@@ -85,7 +85,7 @@ loss:
   # reconstruction loss
   recon_loss: l1
   # kl loss weight
-  kl_weight: 1.0e-5
+  kl_weight: 1.0e-6
 
   perceptual_loss:
     enable: true
@@ -96,21 +96,21 @@ loss:
     dreamsim_cache: "./dreamsim_cache"
 
     gram_loss:
-      enable: false
-      weight: 0.5
+      enable: true
+      weight: 1.0
 
   adversarial_loss:
     enable: true
-    weight: 0.8
+    weight: 0.5
     discriminator: small
-    loss_type: hinge # bce or hinge
+    loss_type: bce # bce or hinge
 
 optimizer:
   # general settings
   total_steps: 200000
   optimizer: adamw
-  lr: 1.5e-4
-  weight_decay: 1.0e-4
+  lr: 2.5e-4
+  weight_decay: 3.0e-4
   betas: [0.90, 0.95]
   grad_clip: null
   ema: 0.999
@@ -122,7 +122,7 @@ optimizer:
   start_preconditioning_step: 250
   # scheduler settings
   schedule: cosine
-  warmup_steps: 10000
+  warmup_steps: 5000
   warmup_lr: 1e-7
   min_lr: 0.0
   power: null
@@ -130,7 +130,7 @@ optimizer:
   discriminator:
     head_only: false
     optimizer: adamw
-    lr: 1.0e-5
+    lr: 1.5e-5
     weight_decay: 0.0
     betas: [0.9, 0.95]
     discriminator_warmup: 20000

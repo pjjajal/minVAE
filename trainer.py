@@ -446,7 +446,7 @@ def main(cfg: DictConfig) -> None:
         )
 
     if cfg.model.compile:
-        vae.compile()
+        vae.compile(mode="max-autotune")
 
     # # create dataset
     train_transform = base_train_transform(
