@@ -163,6 +163,7 @@ class VAEModel(L.LightningModule):
         x, label = batch
 
         # forward pass
+        torch.compiler.cudagraph_mark_step_begin()
         reconstruction, posteriors = self.model.forward(x)
         if self.is_discrete:
             (indices,) = posteriors
@@ -248,6 +249,7 @@ class VAEModel(L.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, label = batch
+        torch.compiler.cudagraph_mark_step_begin()
         reconstruction, posteriors = self.model.forward(x)
         if self.is_discrete:
             (indices,) = posteriors
@@ -446,7 +448,7 @@ def main(cfg: DictConfig) -> None:
         )
 
     if cfg.model.compile:
-        vae.compile(mode="max-autotune")
+        vae = torch.compile(vae,  mode="max-autotune")
 
     # # create dataset
     train_transform = base_train_transform(
