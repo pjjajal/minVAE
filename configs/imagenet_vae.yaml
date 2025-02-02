@@ -103,13 +103,13 @@ loss:
     enable: true
     weight: 0.5
     discriminator: small
-    loss_type: bce # bce or hinge
+    loss_type: hinge # bce or hinge
 
 optimizer:
   # general settings
   total_steps: 200000
   optimizer: adamw
-  lr: 2.5e-4
+  lr: 3.5e-4
   weight_decay: 3.0e-4
   betas: [0.90, 0.95]
   grad_clip: null
@@ -130,7 +130,7 @@ optimizer:
   discriminator:
     head_only: false
     optimizer: adamw
-    lr: 1.5e-5
-    weight_decay: 0.0
+    lr: 2.5e-5
+    weight_decay: 1.0e-4
     betas: [0.9, 0.95]
     discriminator_warmup: 20000

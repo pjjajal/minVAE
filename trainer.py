@@ -414,6 +414,7 @@ def main(cfg: DictConfig) -> None:
         callbacks.append(RichModelSummary())
         callbacks.append(RichProgressBar())
 
+    step_factor = 2 if cfg.loss.adversarial_loss.enable else 1
     trainer = L.Trainer(
         # distributed settings
         devices=cfg.trainer.devices,
@@ -426,7 +427,7 @@ def main(cfg: DictConfig) -> None:
         log_every_n_steps=cfg.trainer.log_every_n_steps,
         # training related
         overfit_batches=cfg.optimizer.overfit_batches,
-        max_steps=cfg.optimizer.total_steps,
+        max_steps=int(cfg.optimizer.total_steps * step_factor),
         use_distributed_sampler=cfg.dataset.use_distributed_sampler,
         benchmark=True,
         enable_checkpointing=False,
@@ -448,7 +449,7 @@ def main(cfg: DictConfig) -> None:
         )
 
     if cfg.model.compile:
-        vae = torch.compile(vae,  mode="max-autotune")
+        vae = torch.compile(vae)
 
     # # create dataset
     train_transform = base_train_transform(

@@ -103,7 +103,7 @@ loss:
     enable: true
     weight: 0.5
     discriminator: small
-    loss_type: bce # bce or hinge
+    loss_type: hinge # bce or hinge
 
 optimizer:
   # general settings
